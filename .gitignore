@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+
+.DS_Store
+.idea/
+.vscode/
+
+*.log
+temp
+
+__pycache__/
+*.pyc
+.pycache/
+
+docs

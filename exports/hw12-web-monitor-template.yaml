@@ -1,0 +1,46 @@
+zabbix_export:
+  version: '7.4'
+  template_groups:
+    - uuid: 2ed5abf35e3e4f28b92160df9c5b4140
+      name: Templates
+  templates:
+    - uuid: 92fbe2d707274e8aa6e131cecc8ab103
+      template: 'HW12 Website Monitoring Template'
+      name: 'HW12 Website Monitoring Template'
+      groups:
+        - name: Templates
+      httptests:
+        - uuid: 6744d2a4fd884b6da1d773311890860a
+          name: 'Google homepage availability'
+          delay: 1m
+          attempts: '1'
+          agent: Zabbix
+          steps:
+            - name: 'Open Google'
+              url: '{$HW12.WEBSITE.URL}'
+              follow_redirects: YES
+              timeout: 15s
+              status_codes: '200,301,302'
+          tags:
+            - tag: homework
+              value: HW12
+            - tag: component
+              value: web-monitoring
+      macros:
+        - macro: '{$HW12.WEBSITE.URL}'
+          value: 'http://www.google.com'
+          description: 'Website URL monitored by the HW12 web scenario.'
+      tags:
+        - tag: homework
+          value: HW12
+  triggers:
+    - uuid: a54744a0ccef49b4a0d55d86ad12e474
+      expression: 'last(/HW12 Website Monitoring Template/web.test.fail[Google homepage availability])<>0'
+      name: 'Google homepage is unavailable'
+      priority: WARNING
+      description: 'The HW12 web scenario has at least one failed step.'
+      tags:
+        - tag: homework
+          value: HW12
+        - tag: component
+          value: web-monitoring

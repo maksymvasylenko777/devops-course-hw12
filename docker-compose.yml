@@ -1,0 +1,87 @@
+name: hw12-zabbix
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${ZABBIX_POSTGRES_USER:?Set ZABBIX_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${ZABBIX_POSTGRES_PASSWORD:?Set ZABBIX_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${ZABBIX_POSTGRES_DB:-zabbix}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  zabbix-server:
+    image: zabbix/zabbix-server-pgsql:alpine-7.4-latest
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_SERVER_HOST: postgres
+      POSTGRES_USER: ${ZABBIX_POSTGRES_USER:?Set ZABBIX_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${ZABBIX_POSTGRES_PASSWORD:?Set ZABBIX_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${ZABBIX_POSTGRES_DB:-zabbix}
+      ZBX_STARTHTTPPOLLERS: 5
+    ports:
+      - "10051:10051"
+    restart: unless-stopped
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-7.4-latest
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      zabbix-server:
+        condition: service_started
+    environment:
+      ZBX_SERVER_HOST: zabbix-server
+      DB_SERVER_HOST: postgres
+      POSTGRES_USER: ${ZABBIX_POSTGRES_USER:?Set ZABBIX_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${ZABBIX_POSTGRES_PASSWORD:?Set ZABBIX_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${ZABBIX_POSTGRES_DB:-zabbix}
+      PHP_TZ: Europe/Kyiv
+    ports:
+      - "8085:8080"
+    restart: unless-stopped
+
+  zabbix-agent:
+    image: zabbix/zabbix-agent:alpine-7.4-latest
+    init: true
+    depends_on:
+      zabbix-server:
+        condition: service_started
+    environment:
+      ZBX_HOSTNAME: zabbix-agent
+      ZBX_SERVER_HOST: zabbix-server
+      ZBX_SERVER_ACTIVE: zabbix-server
+    restart: unless-stopped
+
+  zabbix-bootstrap:
+    image: python:3.13-alpine
+    depends_on:
+      zabbix-web:
+        condition: service_started
+    environment:
+      ZABBIX_API_URL: http://zabbix-web:8080/api_jsonrpc.php
+      ZABBIX_USERNAME: ${ZABBIX_ADMIN_USER:-Admin}
+      ZABBIX_PASSWORD: ${ZABBIX_ADMIN_PASSWORD:-zabbix}
+      ZABBIX_IMPORT_FILE: /opt/zabbix/exports/hw12-web-monitor-template.yaml
+      ZABBIX_HOST_GROUP: HW12
+      ZABBIX_HOST_NAME: hw12-web-monitor
+      ZABBIX_VISIBLE_NAME: HW12 Web Monitor
+      ZABBIX_TEMPLATE_NAME: HW12 Website Monitoring Template
+    volumes:
+      - ./scripts/bootstrap-zabbix.py:/opt/zabbix/bootstrap-zabbix.py:ro
+      - ./exports:/opt/zabbix/exports:ro
+    command: ["python", "/opt/zabbix/bootstrap-zabbix.py"]
+    restart: "no"
+
+volumes:
+  postgres_data:
